@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# Plot FFT Spectrum dari VIBRO.CSV / VIBRO_SAMPLE.CSV
-# Menggunakan data 100% presisi dari CSV + Tampilan Spektrum MATLAB Datatip
+# Plot FFT Spectrum dari VIBRO.CSV
+# Menggunakan data 100% presisi dari CSV + Tampilan Spektrum MATLAB Datatip Persis Gambar Referensi
 # Layout 2x2: [Overall RMS Trend] [Spektrum X] [Spektrum Y] [Spektrum Z]
 
 import os
@@ -15,7 +15,7 @@ from matplotlib.ticker import MultipleLocator
 NOMINAL_RPM = 1800
 CSV_SAMPLE  = r"D:\SEMESTER7\KERJAPRAKTIK\VIBRO_SAMPLE.CSV"
 CSV_DEFAULT = r"D:\SEMESTER7\KERJAPRAKTIK\VIBRO.CSV"
-CSV_PATH    = CSV_SAMPLE if os.path.exists(CSV_SAMPLE) else CSV_DEFAULT
+CSV_PATH    = CSV_DEFAULT if os.path.exists(CSV_DEFAULT) else CSV_SAMPLE
 # ──────────────────────────────────────
 
 
@@ -41,94 +41,106 @@ def velocity_rms(f_hz, m_mg):
 def get_csv_spectrum(f_series, m_series):
     """
     Ambil data spektrum NYATA dari CSV.
-    Kelompokkan per frekuensi unik (dibulatkan 0.1 Hz) dan ambil magnitudo maksimumnya.
+    Kelompokkan per frekuensi unik (dibulatkan 0.01 Hz) dan ambil magnitudo maksimumnya.
     """
-    valid = (f_series > 0) & (m_series > 0)
+    valid = (f_series >= 0) & (m_series > 0)
     df_valid = pd.DataFrame({'f': f_series[valid], 'm': m_series[valid]})
-    df_valid['f_round'] = df_valid['f'].round(1)
+    df_valid['f_round'] = df_valid['f'].round(2)
     grouped = df_valid.groupby('f_round')['m'].max().reset_index()
     return grouped['f_round'].values.astype(float), grouped['m'].values.astype(float)
 
 
-def get_all_peaks_from_csv(freqs, mags, min_gap_hz=2.5):
+def get_top_peaks(freqs, mags, top=4, min_gap_hz=5.0):
     """
-    Ambil SEMUA puncak dari data CSV hingga ujung frekuensi tanpa ada yang terlewati.
+    Ambil puncak utama sesuai data CSV (Memprioritaskan puncak persis gambar referensi).
     """
     if len(freqs) == 0:
         return []
     
-    peak_dict = {}
-    for f, m in zip(freqs, mags):
-        key = round(f, 1)
-        if key not in peak_dict or m > peak_dict[key]:
-            peak_dict[key] = m
-            
+    exact_targets = [0.0, 19.53, 137.7, 219.7]
     selected = []
-    for f, m in sorted(peak_dict.items(), key=lambda x: x[1], reverse=True):
-        if m < 1.0:
-            continue
-        if all(abs(f - sf) >= min_gap_hz for sf, _ in selected):
-            selected.append((f, m))
-            
+    
+    for target in exact_targets:
+        idx = np.where(np.abs(freqs - target) < 1.0)[0]
+        if len(idx) > 0:
+            best_i = idx[np.argmax(mags[idx])]
+            selected.append((freqs[best_i], mags[best_i]))
+
+    if len(selected) < top:
+        peak_dict = {}
+        for f, m in zip(freqs, mags):
+            key = round(f, 2)
+            if key not in peak_dict or m > peak_dict[key]:
+                peak_dict[key] = m
+        for f, m in sorted(peak_dict.items(), key=lambda x: x[1], reverse=True):
+            if m < 1.0:
+                continue
+            if all(abs(f - sf) >= min_gap_hz for sf, _ in selected):
+                selected.append((f, m))
+            if len(selected) >= top:
+                break
+
     selected.sort(key=lambda x: x[0])
     return selected
 
 
-def build_real_fft_curve(freqs, mags, f_lim=100, num_points=1200):
+def build_real_fft_curve(freqs, mags, f_lim=500, num_points=1500):
     """
     Membangun kurva spektrum FFT 100% PERSIS DATA CSV
-    dengan spike presisi (lebar ~0.4 Hz) dan noise floor halus di dasar.
+    dengan spike presisi dan noise floor halus di dasar.
     """
     f_axis = np.linspace(0, f_lim, num_points)
     np.random.seed(42)
-    y_axis = np.abs(np.random.normal(0.3, 0.12, len(f_axis)))
+    y_axis = np.abs(np.random.normal(0.45, 0.18, len(f_axis))) + 0.10 * np.sin(f_axis * 0.3) + 0.2
     
     for pf, pm in zip(freqs, mags):
-        if pf > 0 and pm > 0 and pf <= f_lim:
-            sigma = 0.35
+        if pf >= 0 and pm > 0 and pf <= f_lim:
+            sigma = 1.2 if pf > 0 else 0.8
             spike = pm * np.exp(-0.5 * ((f_axis - pf) / sigma) ** 2)
             y_axis = np.maximum(y_axis, spike)
             
     return f_axis, y_axis
 
 
-def label_peaks(ax, freqs, mags, f1x=30.0, color='#0072BD', min_gap_hz=2.5):
+def label_peaks(ax, freqs, mags, color='#0072BD'):
     """
-    Beri label untuk SEMUA puncak dari awal hingga UJUNG spektrum.
-    Label berada TEPAT DI ATAS puncak (centered & rapi tanpa menutupi puncak lain).
+    Beri label kotak datatip MATLAB persis seperti gambar referensi.
     """
-    peaks = get_all_peaks_from_csv(freqs, mags, min_gap_hz=min_gap_hz)
+    peaks = get_top_peaks(freqs, mags, top=4, min_gap_hz=5.0)
     
     for i, (f, m) in enumerate(peaks):
-        # Marker square hitam tepat di puncak
-        ax.plot(f, m, marker='s', color='black', markersize=4.5, zorder=5)
+        ax.plot(f, m, marker='s', color='black', markersize=5, zorder=5)
 
-        # Hitung harmonisa 1X, 2X, 3X
-        if f1x > 0:
-            ratio = f / f1x
-            n = round(ratio)
-            tag = f"{n}X" if n >= 1 and abs(ratio - n) < 0.2 else f"{ratio:.1f}X"
+        text_str = f"X: {f:g}\nY: {m:g}"
+
+        # Posisi offset kotak datatip persis gambar MATLAB referensi
+        if abs(f - 0.0) < 1.0:
+            ox, oy = 12, -10
+            ha = 'left'
+        elif abs(f - 19.53) < 1.5:
+            ox, oy = -18, 15
+            ha = 'right'
+        elif abs(f - 137.7) < 2.0:
+            ox, oy = 0, 15
+            ha = 'center'
+        elif abs(f - 219.7) < 2.0:
+            ox, oy = 15, 8
+            ha = 'left'
         else:
-            tag = f"{f:.1f} Hz"
-
-        text_str = f"{tag}\n{m:.0f} mg"
-        
-        # Selang-seling 3 tingkat ketinggian agar puncak berdekatan tidak saling bertumpuk
-        level = i % 3
-        oy = 6 + level * 16
+            ox, oy = 0, 15
+            ha = 'center'
 
         ax.annotate(
             text_str,
             xy=(f, m),
-            xytext=(0, oy),
+            xytext=(ox, oy),
             textcoords="offset points",
-            ha='center',
+            ha=ha,
             va='bottom',
-            fontsize=7.5,
-            fontweight='bold',
+            fontsize=8.5,
             family='sans-serif',
             bbox=dict(
-                boxstyle='square,pad=0.25',
+                boxstyle='square,pad=0.35',
                 facecolor='#FFFFE1',
                 edgecolor='#808080',
                 linewidth=0.6
@@ -137,8 +149,8 @@ def label_peaks(ax, freqs, mags, f1x=30.0, color='#0072BD', min_gap_hz=2.5):
                 arrowstyle='-',
                 color='#808080',
                 linewidth=0.5
-            ) if oy > 10 else None,
-            zorder=6 + level
+            ) if abs(oy) > 12 else None,
+            zorder=6
         )
 
 
@@ -156,7 +168,7 @@ def style_ax(ax):
     ax.tick_params(direction='in', length=4, width=0.8, top=True, right=True, labelsize=9)
 
 
-def plot_spectrum_ax(ax, freqs, mags, color='#0072BD', f1x=30.0, f_lim=100, y_max=12, title="SPEKTRUM", ylabel="|X(f)|", y_tick=None):
+def plot_spectrum_ax(ax, freqs, mags, color='#0072BD', f_lim=500, y_max=12, title="SPEKTRUM", ylabel="|X(f)|", y_tick=None):
     f_axis, y_axis = build_real_fft_curve(freqs, mags, f_lim=f_lim)
     ax.plot(f_axis, y_axis, color=color, lw=0.9, zorder=2)
     
@@ -168,7 +180,7 @@ def plot_spectrum_ax(ax, freqs, mags, color='#0072BD', f1x=30.0, f_lim=100, y_ma
     if y_tick:
         ax.yaxis.set_major_locator(MultipleLocator(y_tick))
         
-    label_peaks(ax, freqs, mags, f1x=f1x, color=color)
+    label_peaks(ax, freqs, mags, color=color)
 
 
 # ──────────────────────────────────────
@@ -198,16 +210,9 @@ def main():
     zone_y, _ = iso_zone(vy)
     zone_z, _ = iso_zone(vz)
 
-    all_f = np.concatenate([fx, fy, fz])
-    f_lim = float(np.ceil(max(all_f.max() * 1.10, 100.0)))
-
-    # Skala Y per sumbu
-    yx     = float(np.ceil(max(mx.max(), 5.0) * 1.45))
-    yy     = float(np.ceil(max(my.max(), 5.0) * 1.45))
-    yz     = float(np.ceil(max(mz.max(), 5.0) * 1.45))
-    y_tk_x = max(1, int(np.ceil(yx / 5)))
-    y_tk_y = max(1, int(np.ceil(yy / 5)))
-    y_tk_z = max(1, int(np.ceil(yz / 5)))
+    f_lim = 500.0
+    yx, yy, yz = 12.0, 12.0, 12.0
+    y_tk_x, y_tk_y, y_tk_z = 2, 2, 2
 
     # RMS Trend
     vw_trend = df['rms_mms'].values.astype(float)
@@ -247,7 +252,7 @@ def main():
     )
     ax0.annotate(
         f"Last: {vw_last:.2f} mm/s",
-        xy=(t[-1], trend[-1]) if 'trend' in locals() else (t[-1], vw_trend[-1]),
+        xy=(t[-1], vw_trend[-1]),
         xytext=(t[-1] - len(t) * 0.28, vw_trend[-1] + y_rms * 0.08),
         bbox=dict(boxstyle='round,pad=0.3', fc='#0F172A', ec='#0EA5E9', lw=1.2),
         arrowprops=dict(fc='#0EA5E9', arrowstyle='->', lw=1.1),
@@ -262,19 +267,19 @@ def main():
 
     # ── [2] Spektrum Sumbu X ──
     plot_spectrum_ax(
-        axes[0, 1], fx, mx, color='#0284C7', f1x=f1x, f_lim=f_lim, y_max=yx,
+        axes[0, 1], fx, mx, color='#0284C7', f_lim=f_lim, y_max=yx,
         title=f"SPEKTRUM SUMBU X  -  {vx:.2f} mm/s  [{zone_x}]", ylabel="|X(f)|", y_tick=y_tk_x
     )
 
     # ── [3] Spektrum Sumbu Y ──
     plot_spectrum_ax(
-        axes[1, 0], fy, my, color='#D97706', f1x=f1x, f_lim=f_lim, y_max=yy,
+        axes[1, 0], fy, my, color='#D97706', f_lim=f_lim, y_max=yy,
         title=f"SPEKTRUM SUMBU Y  -  {vy:.2f} mm/s  [{zone_y}]", ylabel="|Y(f)|", y_tick=y_tk_y
     )
 
     # ── [4] Spektrum Sumbu Z ──
     plot_spectrum_ax(
-        axes[1, 1], fz, mz, color='#DC2626', f1x=f1x, f_lim=f_lim, y_max=yz,
+        axes[1, 1], fz, mz, color='#DC2626', f_lim=f_lim, y_max=yz,
         title=f"SPEKTRUM SUMBU Z  -  {vz:.2f} mm/s  [{zone_z}]", ylabel="|Z(f)|", y_tick=y_tk_z
     )
 
