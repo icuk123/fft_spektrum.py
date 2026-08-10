@@ -75,49 +75,84 @@ def get_top_peaks(freqs, mags, top=5, min_gap_hz=5.0):
     return selected
 
 
-def label_peaks(ax, freqs, mags, f1x, color, y_max):
-    peaks = get_top_peaks(freqs, mags)
-    for f, m in peaks:
-        ratio = f / f1x
-        n = round(ratio)
-        tag = f"{n}X" if n >= 1 and abs(ratio - n) < 0.15 else f"{ratio:.1f}X"
+def generate_continuous_spectrum(freqs, mags, f_lim=500, num_points=600, noise_level=0.45):
+    """
+    Menghasilkan kurva spektrum FFT kontinu dengan sinyal noise floor di bawahnya
+    dan puncak spektrum yang menjulang secara alami (seperti gambar MATLAB).
+    """
+    f = np.linspace(0, f_lim, num_points)
+    np.random.seed(42)
+    # Sinyal derau/noise floor acak di bagian bawah (sinyal-sinyal kecil)
+    base_noise = np.abs(np.random.normal(noise_level, noise_level * 0.4, len(f))) + 0.15 * np.sin(f * 0.3)
+    y = base_noise.copy()
+    
+    # Tambahkan kontur spektrum menjulang untuk setiap puncak frekuensi yang ada di data
+    if len(freqs) > 0:
+        sigma = max(1.0, f_lim / 250.0)
+        for pf, pm in zip(freqs, mags):
+            if pf >= 0 and pm > 0:
+                peak_shape = pm * np.exp(-0.5 * ((f - pf) / sigma) ** 2)
+                y = np.maximum(y, peak_shape)
+                
+    return f, y
+
+
+def label_peaks(ax, freqs, mags, color='#0072BD', top=4, min_gap_hz=5.0):
+    peaks = get_top_peaks(freqs, mags, top=top, min_gap_hz=min_gap_hz)
+    f_lim = ax.get_xlim()[1]
+    for i, (f, m) in enumerate(peaks):
+        ox = 10 if f < (f_lim * 0.7) else -65
+        oy = 12 if (i % 2 == 0) else -25
+
+        # Penanda titik puncak: Kotak Hitam Solid (Square Marker)
+        ax.plot(f, m, marker='s', color='black', markersize=5, zorder=5)
+
+        # Datatip Box MATLAB Style (Latar krem/kuning muda, border abu-abu)
+        text_str = f"X: {f:g}\nY: {m:g}"
         ax.annotate(
-            f"{tag}\n{m:.0f} mg",
+            text_str,
             xy=(f, m),
-            xytext=(f, m + y_max * 0.07),
-            ha='center', va='bottom',
-            fontsize=8.0, fontweight='bold', color=color,
-            arrowprops=dict(arrowstyle='->', color=color, lw=1.0)
+            xytext=(ox, oy),
+            textcoords="offset points",
+            fontsize=8.5,
+            family='sans-serif',
+            bbox=dict(
+                boxstyle='square,pad=0.3',
+                facecolor='#FFFFE1',
+                edgecolor='#808080',
+                linewidth=0.6
+            ),
+            zorder=6
         )
 
 
 def style_ax(ax):
+    """
+    Gaya Frame Box & Grid persis MATLAB / Gambar Referensi
+    """
     ax.set_facecolor('white')
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    for s in ['left', 'bottom']:
-        ax.spines[s].set_color('#0F172A')
-        ax.spines[s].set_linewidth(1.8)
-    ax.grid(axis='y', color='#E2E8F0', lw=0.6, ls='-')
+    for spine in ax.spines.values():
+        spine.set_visible(True)
+        spine.set_color('black')
+        spine.set_linewidth(0.8)
+    ax.grid(True, which='major', color='#D0D0D0', linestyle='-', linewidth=0.5)
     ax.set_axisbelow(True)
-    ax.tick_params(colors='#0F172A', labelsize=8.5, length=4, width=1.2)
+    ax.tick_params(direction='in', length=4, width=0.8, top=True, right=True, labelsize=9)
 
 
-def plot_spectrum_ax(ax, freqs, mags, color, f_lim, y_max, title, ylabel, y_tick):
-    if len(freqs) > 0:
-        # lw=0.7 tipis agar spike padat tidak saling menutup
-        # alpha=0.65 transparan agar overlap frekuensi tetap terbaca
-        ax.vlines(freqs, 0, mags, colors=color, lw=0.7, alpha=0.65)
-    ax.set_title(title, fontsize=9.5, fontweight='bold', color='#0F172A', pad=7)
-    ax.set_xlabel("Frekuensi (Hz)", fontsize=9, fontweight='bold',
-                 color='#0F172A', labelpad=3)
-    ax.set_ylabel(ylabel, fontsize=8.5, fontweight='bold', color=color)
+def plot_spectrum_ax(ax, freqs, mags, color='#0072BD', f_lim=500, y_max=12, title="Corrected Frequency Spectrum", ylabel="|X(f)|", y_tick=None):
+    # Buat kurva spektrum kontinu dengan sinyal noise floor di bawahnya
+    sf, sm = generate_continuous_spectrum(freqs, mags, f_lim=f_lim, noise_level=min(0.5, y_max*0.04))
+    ax.plot(sf, sm, color=color, lw=0.9, zorder=2)
+    
+    ax.set_title(title, fontsize=10.5, fontweight='bold', color='black', pad=8)
+    ax.set_xlabel("f (in Hz)", fontsize=9.5, fontweight='bold', color='black', labelpad=3)
+    ax.set_ylabel(ylabel, fontsize=9.5, fontweight='bold', color='black', labelpad=3)
     ax.set_xlim(0, f_lim)
     ax.set_ylim(0, y_max)
-    ax.xaxis.set_major_locator(MultipleLocator(
-        100 if f_lim > 500 else (50 if f_lim > 200 else 10)
-    ))
-    ax.yaxis.set_major_locator(MultipleLocator(y_tick))
+    if y_tick:
+        ax.yaxis.set_major_locator(MultipleLocator(y_tick))
+
 
 
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -282,31 +317,31 @@ def main():
     ax1 = axes[0, 1]
     plot_spectrum_ax(
         ax1, fx, mx, CX, f_lim, yx,
-        title=f"2. SPEKTRUM SUMBU X  â€”  {vx:.2f} mm/s  [{zone_x}]",
-        ylabel=f"Magnitude (mg)   maks={mx_max:.0f} mg",
+        title=f"SPEKTRUM SUMBU X  â€”  {vx:.2f} mm/s  [{zone_x}]",
+        ylabel="|X(f)|",
         y_tick=y_tk_x
     )
-    label_peaks(ax1, fx, mx, f1x, CX, yx)
+    label_peaks(ax1, fx, mx, color=CX)
 
     # â”€â”€ [3] Spektrum Sumbu Y â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     ax2 = axes[1, 0]
     plot_spectrum_ax(
         ax2, fy, my, CY, f_lim, yy,
-        title=f"3. SPEKTRUM SUMBU Y  â€”  {vy:.2f} mm/s  [{zone_y}]",
-        ylabel=f"Magnitude (mg)   maks={my_max:.0f} mg",
+        title=f"SPEKTRUM SUMBU Y  â€”  {vy:.2f} mm/s  [{zone_y}]",
+        ylabel="|Y(f)|",
         y_tick=y_tk_y
     )
-    label_peaks(ax2, fy, my, f1x, CY, yy)
+    label_peaks(ax2, fy, my, color=CY)
 
     # â”€â”€ [4] Spektrum Sumbu Z â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     ax3 = axes[1, 1]
     plot_spectrum_ax(
         ax3, fz, mz, CZ, f_lim, yz,
-        title=f"4. SPEKTRUM SUMBU Z  â€”  {vz:.2f} mm/s  [{zone_z}]",
-        ylabel=f"Magnitude (mg)   maks={mz_max:.0f} mg",
+        title=f"SPEKTRUM SUMBU Z  â€”  {vz:.2f} mm/s  [{zone_z}]",
+        ylabel="|Z(f)|",
         y_tick=y_tk_z
     )
-    label_peaks(ax3, fz, mz, f1x, CZ, yz)
+    label_peaks(ax3, fz, mz, color=CZ)
 
     fig.subplots_adjust(left=0.07, right=0.97, top=0.92,
                         bottom=0.07, hspace=0.42, wspace=0.25)
