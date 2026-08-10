@@ -48,12 +48,16 @@ def get_csv_spectrum(f_series, m_series):
     return grouped['f_round'].values.astype(float), grouped['m'].values.astype(float)
 
 
-def get_all_peaks_from_csv(freqs, mags, min_gap_hz=2.5):
+def get_all_peaks_from_csv(freqs, mags, min_gap_hz=4.0):
     """
-    Ambil SEMUA puncak dari data CSV hingga ujung frekuensi tanpa ada yang terlewati.
+    Ambil puncak-puncak signifikan dari data CSV.
+    Menyaring derau (noise floor) agar tidak menumpuk label di dasar grafik.
     """
     if len(freqs) == 0:
         return []
+    
+    max_m = mags.max()
+    threshold = max(2.5, max_m * 0.20)  # Hanya label puncak > 20% dari puncak terbesar & min 2.5 mg
     
     peak_dict = {}
     for f, m in zip(freqs, mags):
@@ -63,7 +67,7 @@ def get_all_peaks_from_csv(freqs, mags, min_gap_hz=2.5):
             
     selected = []
     for f, m in sorted(peak_dict.items(), key=lambda x: x[1], reverse=True):
-        if m < 1.0:
+        if m < threshold:
             continue
         if all(abs(f - sf) >= min_gap_hz for sf, _ in selected):
             selected.append((f, m))
@@ -75,7 +79,7 @@ def get_all_peaks_from_csv(freqs, mags, min_gap_hz=2.5):
 def build_real_fft_curve(freqs, mags, f_lim=100, num_points=1200):
     """
     Membangun kurva spektrum FFT 100% PERSIS DATA CSV
-    dengan spike presisi (lebar ~0.4 Hz) dan noise floor halus di dasar.
+    dengan spike presisi dan noise floor halus di dasar.
     """
     f_axis = np.linspace(0, f_lim, num_points)
     np.random.seed(42)
@@ -83,17 +87,16 @@ def build_real_fft_curve(freqs, mags, f_lim=100, num_points=1200):
     
     for pf, pm in zip(freqs, mags):
         if pf > 0 and pm > 0 and pf <= f_lim:
-            sigma = 0.35
+            sigma = 0.5
             spike = pm * np.exp(-0.5 * ((f_axis - pf) / sigma) ** 2)
             y_axis = np.maximum(y_axis, spike)
             
     return f_axis, y_axis
 
 
-def label_peaks(ax, freqs, mags, f1x=30.0, color='#0072BD', min_gap_hz=2.5):
+def label_peaks(ax, freqs, mags, f1x=30.0, color='#0072BD', min_gap_hz=4.0):
     """
-    Beri label untuk SEMUA puncak dari awal hingga UJUNG spektrum.
-    Label berada TEPAT DI ATAS puncak (centered & rapi tanpa menutupi puncak lain).
+    Beri label puncak signifikan secara rapi (centered tepat di atas puncak).
     """
     peaks = get_all_peaks_from_csv(freqs, mags, min_gap_hz=min_gap_hz)
     
@@ -113,7 +116,7 @@ def label_peaks(ax, freqs, mags, f1x=30.0, color='#0072BD', min_gap_hz=2.5):
         
         # Selang-seling 3 tingkat ketinggian agar puncak berdekatan tidak saling bertumpuk
         level = i % 3
-        oy = 6 + level * 16
+        oy = 8 + level * 16
 
         ax.annotate(
             text_str,
@@ -197,12 +200,12 @@ def main():
     zone_z, _ = iso_zone(vz)
 
     all_f = np.concatenate([fx, fy, fz])
-    f_lim = float(np.ceil(max(all_f.max() * 1.10, 100.0)))
+    f_lim = float(np.ceil(max(all_f.max() * 1.05, 100.0)))
 
     # Skala Y per sumbu
-    yx     = float(np.ceil(max(mx.max(), 5.0) * 1.45))
-    yy     = float(np.ceil(max(my.max(), 5.0) * 1.45))
-    yz     = float(np.ceil(max(mz.max(), 5.0) * 1.45))
+    yx     = float(np.ceil(max(mx.max(), 5.0) * 1.35))
+    yy     = float(np.ceil(max(my.max(), 5.0) * 1.35))
+    yz     = float(np.ceil(max(mz.max(), 5.0) * 1.35))
     y_tk_x = max(1, int(np.ceil(yx / 5)))
     y_tk_y = max(1, int(np.ceil(yy / 5)))
     y_tk_z = max(1, int(np.ceil(yz / 5)))
