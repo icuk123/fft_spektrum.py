@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# Plot FFT Spectrum dari VIBRO.CSV
+# Plot FFT Spectrum dari VIBRO.CSV / VIBRO_SAMPLE.CSV
 # Menggunakan data 100% presisi dari CSV + Tampilan Spektrum MATLAB Datatip
 # Layout 2x2: [Overall RMS Trend] [Spektrum X] [Spektrum Y] [Spektrum Z]
 
@@ -11,10 +11,12 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
 
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ──────────────────────────────────────
 NOMINAL_RPM = 1800
-CSV_PATH    = r"D:\SEMESTER7\KERJAPRAKTIK\VIBRO.CSV"
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+CSV_SAMPLE  = r"D:\SEMESTER7\KERJAPRAKTIK\VIBRO_SAMPLE.CSV"
+CSV_DEFAULT = r"D:\SEMESTER7\KERJAPRAKTIK\VIBRO.CSV"
+CSV_PATH    = CSV_SAMPLE if os.path.exists(CSV_SAMPLE) else CSV_DEFAULT
+# ──────────────────────────────────────
 
 
 def iso_zone(v):
@@ -169,7 +171,7 @@ def plot_spectrum_ax(ax, freqs, mags, color='#0072BD', f1x=30.0, f_lim=100, y_ma
     label_peaks(ax, freqs, mags, f1x=f1x, color=color)
 
 
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ──────────────────────────────────────
 def main():
     if not os.path.exists(CSV_PATH):
         print("[ERROR] File tidak ditemukan:", CSV_PATH)
@@ -214,17 +216,17 @@ def main():
     vw_last  = float(vw_trend[-1])
     t        = np.arange(len(vw_trend))
 
-    # â”€â”€ Figure â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── Figure ──────────────────────────────────
     fig, axes = plt.subplots(2, 2, figsize=(14, 9.5), facecolor='white')
     fig.suptitle(
-        f"ISO 10816-3  ({NOMINAL_RPM} RPM)  â€”  {zone_all}  |  MAX RMS: {vw_max:.2f} mm/s  (Avg: {vw_avg:.2f} mm/s)",
+        f"ISO 10816-3  ({NOMINAL_RPM} RPM)  -  {zone_all}  |  MAX RMS: {vw_max:.2f} mm/s  (Avg: {vw_avg:.2f} mm/s)",
         fontsize=11.5, fontweight='bold', color=col_all, y=0.98
     )
 
     for ax in axes.flat:
         style_ax(ax)
 
-    # â”€â”€ [1] Overall RMS Trend â”€â”€
+    # ── [1] Overall RMS Trend ──
     ax0   = axes[0, 0]
     y_rms = max(5.0, float(np.ceil(vw_max * 1.25)))
     
@@ -245,7 +247,7 @@ def main():
     )
     ax0.annotate(
         f"Last: {vw_last:.2f} mm/s",
-        xy=(t[-1], vw_trend[-1]),
+        xy=(t[-1], trend[-1]) if 'trend' in locals() else (t[-1], vw_trend[-1]),
         xytext=(t[-1] - len(t) * 0.28, vw_trend[-1] + y_rms * 0.08),
         bbox=dict(boxstyle='round,pad=0.3', fc='#0F172A', ec='#0EA5E9', lw=1.2),
         arrowprops=dict(fc='#0EA5E9', arrowstyle='->', lw=1.1),
@@ -258,22 +260,22 @@ def main():
     ax0.set_ylim(0, y_rms)
     ax0.legend(loc='upper left', fontsize=6.8, frameon=True, facecolor='white', edgecolor='#CBD5E1')
 
-    # â”€â”€ [2] Spektrum Sumbu X â”€â”€
+    # ── [2] Spektrum Sumbu X ──
     plot_spectrum_ax(
         axes[0, 1], fx, mx, color='#0284C7', f1x=f1x, f_lim=f_lim, y_max=yx,
-        title=f"SPEKTRUM SUMBU X  â€”  {vx:.2f} mm/s  [{zone_x}]", ylabel="|X(f)|", y_tick=y_tk_x
+        title=f"SPEKTRUM SUMBU X  -  {vx:.2f} mm/s  [{zone_x}]", ylabel="|X(f)|", y_tick=y_tk_x
     )
 
-    # â”€â”€ [3] Spektrum Sumbu Y â”€â”€
+    # ── [3] Spektrum Sumbu Y ──
     plot_spectrum_ax(
         axes[1, 0], fy, my, color='#D97706', f1x=f1x, f_lim=f_lim, y_max=yy,
-        title=f"SPEKTRUM SUMBU Y  â€”  {vy:.2f} mm/s  [{zone_y}]", ylabel="|Y(f)|", y_tick=y_tk_y
+        title=f"SPEKTRUM SUMBU Y  -  {vy:.2f} mm/s  [{zone_y}]", ylabel="|Y(f)|", y_tick=y_tk_y
     )
 
-    # â”€â”€ [4] Spektrum Sumbu Z â”€â”€
+    # ── [4] Spektrum Sumbu Z ──
     plot_spectrum_ax(
         axes[1, 1], fz, mz, color='#DC2626', f1x=f1x, f_lim=f_lim, y_max=yz,
-        title=f"SPEKTRUM SUMBU Z  â€”  {vz:.2f} mm/s  [{zone_z}]", ylabel="|Z(f)|", y_tick=y_tk_z
+        title=f"SPEKTRUM SUMBU Z  -  {vz:.2f} mm/s  [{zone_z}]", ylabel="|Z(f)|", y_tick=y_tk_z
     )
 
     fig.subplots_adjust(left=0.07, right=0.97, top=0.92, bottom=0.07, hspace=0.45, wspace=0.25)
