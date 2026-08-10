@@ -94,23 +94,32 @@ def build_real_fft_curve(freqs, mags, f_lim=100, num_points=1200):
     return f_axis, y_axis
 
 
-def label_peaks(ax, freqs, mags, f1x=30.0, color='#0072BD', min_gap_hz=4.0):
+def label_peaks(ax, freqs, mags, f1x_nominal=30.0, color='#0072BD', min_gap_hz=4.0):
     """
-    Beri label puncak signifikan secara rapi (centered tepat di atas puncak).
+    Beri label puncak signifikan secara akurat.
+    Memperhitungkan frekuensi 1X aktual pada data untuk penentuan harmonisa (1X, 2X, 3X).
     """
     peaks = get_all_peaks_from_csv(freqs, mags, min_gap_hz=min_gap_hz)
     
+    # Cari puncak 1X aktual pada data (puncak dominan di kisaran 25 - 35 Hz)
+    f1x_actual = f1x_nominal
+    candidate_1x = [f for f, m in peaks if 25.0 <= f <= 35.0]
+    if len(candidate_1x) > 0:
+        f1x_actual = max(candidate_1x, key=lambda f: dict(peaks)[f])
+
     for i, (f, m) in enumerate(peaks):
         # Marker square hitam tepat di puncak
         ax.plot(f, m, marker='s', color='black', markersize=4.5, zorder=5)
 
-        # Hitung harmonisa 1X, 2X, 3X
-        if f1x > 0:
-            ratio = f / f1x
-            n = round(ratio)
-            tag = f"{n}X" if n >= 1 and abs(ratio - n) < 0.2 else f"{ratio:.1f}X"
+        # Hitung rasio presisi terhadap 1X aktual
+        ratio = f / f1x_actual
+        n = round(ratio)
+        
+        # Toleransi ketat (0.12) agar 55 Hz (rasio 1.65 - 1.83) TIDAK salah dibulatkan ke 2X
+        if n >= 1 and abs(ratio - n) < 0.12:
+            tag = f"{n}X"
         else:
-            tag = f"{f:.1f} Hz"
+            tag = f"{ratio:.1f}X"
 
         text_str = f"{tag}\n{m:.0f} mg"
         
@@ -169,7 +178,7 @@ def plot_spectrum_ax(ax, freqs, mags, color='#0072BD', f1x=30.0, f_lim=100, y_ma
     if y_tick:
         ax.yaxis.set_major_locator(MultipleLocator(y_tick))
         
-    label_peaks(ax, freqs, mags, f1x=f1x, color=color)
+    label_peaks(ax, freqs, mags, f1x_nominal=f1x, color=color)
 
 
 # ──────────────────────────────────────
