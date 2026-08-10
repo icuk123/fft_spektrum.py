@@ -97,7 +97,7 @@ def generate_continuous_spectrum(freqs, mags, f_lim=500, num_points=600, noise_l
     return f, y
 
 
-def label_peaks(ax, freqs, mags, color='#0072BD', top=4, min_gap_hz=5.0):
+def label_peaks(ax, freqs, mags, f1x=30.0, color='#0072BD', top=4, min_gap_hz=5.0):
     peaks = get_top_peaks(freqs, mags, top=top, min_gap_hz=min_gap_hz)
     f_lim = ax.get_xlim()[1]
     for i, (f, m) in enumerate(peaks):
@@ -107,23 +107,33 @@ def label_peaks(ax, freqs, mags, color='#0072BD', top=4, min_gap_hz=5.0):
         # Penanda titik puncak: Kotak Hitam Solid (Square Marker)
         ax.plot(f, m, marker='s', color='black', markersize=5, zorder=5)
 
-        # Datatip Box MATLAB Style (Latar krem/kuning muda, border abu-abu)
-        text_str = f"X: {f:g}\nY: {m:g}"
+        # Hitung orde harmonisa 1X, 2X, 3X, dst.
+        if f1x > 0:
+            ratio = f / f1x
+            n = round(ratio)
+            tag = f"{n}X" if n >= 1 and abs(ratio - n) < 0.2 else f"{ratio:.1f}X"
+        else:
+            tag = f"{f:.1f} Hz"
+
+        # Label 1X, 2X, 3X dalam box krem MATLAB (tanpa tulisan X: dan Y:)
+        text_str = f"{tag}\n{m:.0f} mg"
         ax.annotate(
             text_str,
             xy=(f, m),
             xytext=(ox, oy),
             textcoords="offset points",
             fontsize=8.5,
+            fontweight='bold',
             family='sans-serif',
             bbox=dict(
-                boxstyle='square,pad=0.3',
+                boxstyle='square,pad=0.35',
                 facecolor='#FFFFE1',
                 edgecolor='#808080',
                 linewidth=0.6
             ),
             zorder=6
         )
+
 
 
 def style_ax(ax):
@@ -321,7 +331,7 @@ def main():
         ylabel="|X(f)|",
         y_tick=y_tk_x
     )
-    label_peaks(ax1, fx, mx, color=CX)
+    label_peaks(ax1, fx, mx, f1x=f1x, color=CX)
 
     # â”€â”€ [3] Spektrum Sumbu Y â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     ax2 = axes[1, 0]
@@ -331,7 +341,7 @@ def main():
         ylabel="|Y(f)|",
         y_tick=y_tk_y
     )
-    label_peaks(ax2, fy, my, color=CY)
+    label_peaks(ax2, fy, my, f1x=f1x, color=CY)
 
     # â”€â”€ [4] Spektrum Sumbu Z â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     ax3 = axes[1, 1]
@@ -341,7 +351,7 @@ def main():
         ylabel="|Z(f)|",
         y_tick=y_tk_z
     )
-    label_peaks(ax3, fz, mz, color=CZ)
+    label_peaks(ax3, fz, mz, f1x=f1x, color=CZ)
 
     fig.subplots_adjust(left=0.07, right=0.97, top=0.92,
                         bottom=0.07, hspace=0.42, wspace=0.25)
