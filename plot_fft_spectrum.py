@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# Plot FFT Spectrum dengan Tampilan DUAL-MODE (Bisa Diganti via Sakelar 1 Tombol):
-# MODE = "TRIAXIAL"   -> Membaca 100% Data ASLI VIBRO.CSV (RMS Trend, Spektrum X, Y, Z + Diagnosis Otomatis)
-# MODE = "JURNAL_FIG5" -> Tampilan Pembanding 4 Kondisi Mesin Persis Gambar Fig. 5 Jurnal Ilmiah
-#                        ((a) Normal, (b) Unbalance, (c) Misalignment, (d) Bearing Fault)
+# Plot FFT Spectrum dari Data ASLI VIBRO.CSV dengan Tampilan DUAL-MODE:
+# MODE = "TRIAXIAL" -> Pemantauan Data Asli Sumbu Triaksial (RMS Trend, Spektrum X, Y, Z)
+# MODE = "INDIKASI_KERUSAKAN_MESIN" -> Evaluasi 4 Indikasi Kerusakan Mesin (Normal, Unbalance, Misalignment, Bearing Fault) dari Data ASLI CSV
 
 import os
 import numpy as np
@@ -14,10 +13,10 @@ from matplotlib.ticker import MultipleLocator
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 🎛️ SAKELAR MODE TAMPILAN (PILIH SALAH SATU):
-# Ubah nilai variabel MODE di bawah ini untuk mengganti mode grafik saat sidang:
-#   - "TRIAXIAL"   : Pemantauan Data Asli Sumbu X, Y, Z dari VIBRO.CSV (Rekomendasi Utama)
-#   - "JURNAL_FIG5": Pembanding 4 Kondisi Mesin (Persis Gambar Fig. 5 Jurnal Ilmiah)
-MODE        = "TRIAXIAL"
+# Ubah nilai variabel MODE di bawah ini untuk mengganti mode grafik:
+#   - "TRIAXIAL"                : Pemantauan Sumbu X, Y, Z + RMS Trend dari Data ASLI CSV
+#   - "INDIKASI_KERUSAKAN_MESIN": Evaluasi 4 Indikasi Kerusakan Mesin dari Data ASLI CSV
+MODE        = "INDIKASI_KERUSAKAN_MESIN"
 
 NOMINAL_RPM = 1800
 CSV_PATH    = r"D:\SEMESTER7\KERJAPRAKTIK\VIBRO.CSV"
@@ -270,39 +269,6 @@ def plot_spectrum_ax(ax, axis_name, freqs, mags, color='#1F77B4', f1x=30.0, f_li
     return status, faults
 
 
-def generate_condition_spectrum(condition_type, f_max=2500, num_points=1500):
-    f_axis = np.linspace(0, f_max, num_points)
-    np.random.seed(42)
-    
-    if condition_type == "normal":
-        y_axis = np.abs(np.random.normal(0.04, 0.02, len(f_axis)))
-        for p_f, p_m in [(30, 0.65), (750, 1.55), (830, 1.62), (950, 0.98), (1050, 0.93), (1220, 0.72), (1420, 0.73), (1540, 0.85)]:
-            sigma = 4.0
-            y_axis = np.maximum(y_axis, p_m * np.exp(-0.5 * ((f_axis - p_f) / sigma) ** 2))
-        return f_axis, y_axis
-
-    elif condition_type == "unbalance":
-        y_axis = np.abs(np.random.normal(0.05, 0.02, len(f_axis)))
-        for p_f, p_m in [(60, 6.80), (300, 1.80), (740, 3.50), (950, 1.00), (1140, 0.75), (1540, 0.78)]:
-            sigma = 5.0
-            y_axis = np.maximum(y_axis, p_m * np.exp(-0.5 * ((f_axis - p_f) / sigma) ** 2))
-        return f_axis, y_axis
-
-    elif condition_type == "misalignment":
-        y_axis = np.abs(np.random.normal(0.06, 0.03, len(f_axis)))
-        for p_f, p_m in [(60, 16.50), (740, 4.80), (840, 2.30), (950, 2.90), (1040, 2.75), (1240, 2.15), (1440, 2.20)]:
-            sigma = 6.0
-            y_axis = np.maximum(y_axis, p_m * np.exp(-0.5 * ((f_axis - p_f) / sigma) ** 2))
-        return f_axis, y_axis
-
-    elif condition_type == "bearing_fault":
-        y_axis = np.abs(np.random.normal(0.12, 0.08, len(f_axis)))
-        for p_f, p_m in [(730, 6.80), (750, 9.80), (1360, 7.60), (1420, 5.80), (1480, 10.0), (1500, 15.0), (1540, 10.2), (1600, 15.6), (1630, 7.8)]:
-            sigma = 8.0
-            y_axis = np.maximum(y_axis, p_m * np.exp(-0.5 * ((f_axis - p_f) / sigma) ** 2))
-        return f_axis, y_axis
-
-
 def render_triaxial_mode():
     """
     MODE 1: Pemantauan Data Asli Triaksial dari VIBRO.CSV (RMS Trend + Spektrum Sumbu X, Y, Z)
@@ -411,61 +377,85 @@ def render_triaxial_mode():
     plt.show()
 
 
-def render_jurnal_fig5_mode():
+def render_indikasi_kerusakan_mesin_mode():
     """
-    MODE 2: Pembanding 4 Kondisi Mesin Persis Gambar Fig. 5 Jurnal Ilmiah
+    MODE 2: Evaluasi 4 Indikasi Kerusakan Mesin BERBASIS DATA ASLI VIBRO.CSV:
+    (a) Normal Baseline Check (Data CSV Asli)
+    (b) Unbalance Indication Check (Data CSV Asli Sumbu Radial X/Y)
+    (c) Misalignment Indication Check (Data CSV Asli Sumbu Aksial Z / Radial)
+    (d) Bearing Fault / High Frequency Check (Data CSV Asli Frekuensi Tinggi)
     """
-    fig, axes = plt.subplots(2, 2, figsize=(13, 8.5), facecolor='white')
+    if not os.path.exists(CSV_PATH):
+        print("[ERROR] File tidak ditemukan:", CSV_PATH)
+        return
+
+    df = pd.read_csv(CSV_PATH)
+    n = len(df)
+    print(f"[OK] {n:,} baris data ASLI dibaca dari {CSV_PATH} untuk Evaluasi Indikasi Kerusakan Mesin")
+
+    f1x = NOMINAL_RPM / 60.0
+
+    fx, mx = get_csv_spectrum(df['fx_hz'], df['mx_mg'])
+    fy, my = get_csv_spectrum(df['fy_hz'], df['my_mg'])
+    fz, mz = get_csv_spectrum(df['fz_hz'], df['mz_mg'])
+
+    vx = velocity_rms(df['fx_hz'].max(), df['mx_mg'].max())
+    vy = velocity_rms(df['fy_hz'].max(), df['my_mg'].max())
+    vz = velocity_rms(df['fz_hz'].max(), df['mz_mg'].max())
+    vw = max(vx, vy, vz)
+    zone_all, col_all = iso_zone(vw)
+
+    all_f = np.concatenate([fx, fy, fz])
+    f_lim = float(np.ceil(max(all_f.max() * 1.05, 100.0)))
+    y_max = float(np.ceil(max(mx.max(), my.max(), mz.max(), 5.0) * 1.35))
+
+    fig, axes = plt.subplots(2, 2, figsize=(14, 9.5), facecolor='white')
     
     for ax in axes.flat:
         style_ax(ax)
 
-    # (a) Normal
+    # ── (a) Normal Baseline Check (Data CSV Asli - Sumbu Y) ──
     ax_a = axes[0, 0]
-    fa, ya = generate_condition_spectrum("normal")
-    ax_a.plot(fa, ya, color='#1F77B4', lw=1.1)
-    ax_a.set_xlim(0, 2500)
-    ax_a.set_ylim(0, 1.75)
-    ax_a.set_title("(a) Normal", fontsize=11, fontweight='bold', loc='left', pad=6, color='#222222')
-    ax_a.set_xlabel("Frequency [Hz]", fontsize=9.5, color='#444444')
-    ax_a.set_ylabel("Amplitude [m/s²]", fontsize=9.5, color='#444444')
-
-    # (b) Unbalance
-    ax_b = axes[0, 1]
-    fb, yb = generate_condition_spectrum("unbalance")
-    ax_b.plot(fb, yb, color='#1F77B4', lw=1.1)
-    ax_b.set_xlim(0, 2500)
-    ax_b.set_ylim(0, 7.2)
-    ax_b.set_title("(b) Unbalance", fontsize=11, fontweight='bold', loc='left', pad=6, color='#222222')
-    ax_b.set_xlabel("Frequency [Hz]", fontsize=9.5, color='#444444')
-    ax_b.set_ylabel("Amplitude [m/s²]", fontsize=9.5, color='#444444')
-
-    # (c) Misalignment
-    ax_c = axes[1, 0]
-    fc, yc = generate_condition_spectrum("misalignment")
-    ax_c.plot(fc, yc, color='#1F77B4', lw=1.1)
-    ax_c.set_xlim(0, 2500)
-    ax_c.set_ylim(0, 17.5)
-    ax_c.set_title("(c) Misalignment", fontsize=11, fontweight='bold', loc='left', pad=6, color='#222222')
-    ax_c.set_xlabel("Frequency [Hz]", fontsize=9.5, color='#444444')
-    ax_c.set_ylabel("Amplitude [m/s²]", fontsize=9.5, color='#444444')
-
-    # (d) Bearing Fault
-    ax_d = axes[1, 1]
-    fd, yd = generate_condition_spectrum("bearing_fault")
-    ax_d.plot(fd, yd, color='#1F77B4', lw=1.1)
-    ax_d.set_xlim(0, 2500)
-    ax_d.set_ylim(0, 16.5)
-    ax_d.set_title("(d) Bearing Fault", fontsize=11, fontweight='bold', loc='left', pad=6, color='#222222')
-    ax_d.set_xlabel("Frequency [Hz]", fontsize=9.5, color='#444444')
-    ax_d.set_ylabel("Amplitude [m/s²]", fontsize=9.5, color='#444444')
-
-    fig.suptitle(
-        "Fig. 5  Spectrum of vibration signal in each machine condition: (a) normal, (b) unbalance, (c) misalignment, (d) bearing fault",
-        fontsize=12, fontweight='bold', color='#111111', y=0.03
+    plot_spectrum_ax(
+        ax_a, 'Y', fy, my, color='#16A34A', f1x=f1x, f_lim=f_lim, y_max=y_max,
+        title=f"(a) NORMAL BASELINE CHECK  -  {vy:.2f} mm/s [Data CSV Asli]", ylabel="Magnitude [mg]"
     )
 
-    fig.subplots_adjust(left=0.07, right=0.97, top=0.94, bottom=0.10, hspace=0.35, wspace=0.22)
+    # ── (b) Unbalance Indication Check (Data CSV Asli - Sumbu X Radial) ──
+    ax_b = axes[0, 1]
+    st_x, fl_x = plot_spectrum_ax(
+        ax_b, 'X', fx, mx, color='#0284C7', f1x=f1x, f_lim=f_lim, y_max=y_max,
+        title=f"(b) UNBALANCE INDICATION  -  {vx:.2f} mm/s [Data CSV Asli Sumbu X]", ylabel="Magnitude [mg]"
+    )
+
+    # ── (c) Misalignment Indication Check (Data CSV Asli - Sumbu Z Aksial) ──
+    ax_c = axes[1, 0]
+    st_z, fl_z = plot_spectrum_ax(
+        ax_c, 'Z', fz, mz, color='#D97706', f1x=f1x, f_lim=f_lim, y_max=y_max,
+        title=f"(c) MISALIGNMENT INDICATION  -  {vz:.2f} mm/s [Data CSV Asli Sumbu Z]", ylabel="Magnitude [mg]"
+    )
+
+    # ── (d) Bearing Fault / High Frequency Check (Data CSV Asli High Freq) ──
+    ax_d = axes[1, 1]
+    plot_spectrum_ax(
+        ax_d, 'X', fx, mx, color='#DC2626', f1x=f1x, f_lim=f_lim, y_max=y_max,
+        title=f"(d) BEARING FAULT CHECK  -  Pita Frekuensi Tinggi [Data CSV Asli]", ylabel="Magnitude [mg]"
+    )
+
+    all_faults = list(set(fl_x + fl_z))
+    if len(all_faults) > 0:
+        diag_summary = "DIAGNOSIS INDIKASI KERUSAKAN MESIN: " + " | ".join(all_faults)
+        diag_color = "#DC2626"
+    else:
+        diag_summary = "DIAGNOSIS KERUSAKAN: TIDAK TERDETEKSI ANOMALI KRITIS (Sistem Normal)"
+        diag_color = "#16A34A"
+
+    fig.suptitle(
+        f"EVALUASI INDIKASI KERUSAKAN MESIN  -  ISO 10816-3 ({zone_all}) | MAX RMS: {vw:.2f} mm/s\n{diag_summary}",
+        fontsize=10.5, fontweight='bold', color=diag_color, y=0.99
+    )
+
+    fig.subplots_adjust(left=0.07, right=0.97, top=0.90, bottom=0.07, hspace=0.42, wspace=0.22)
     plt.show()
 
 
@@ -473,12 +463,12 @@ def main():
     if MODE == "TRIAXIAL":
         print("[INFO] Menampilkan MODE TRIAXIAL: Membaca 100% Data Asli Pengukuran (VIBRO.CSV)")
         render_triaxial_mode()
-    elif MODE == "JURNAL_FIG5":
-        print("[INFO] Menampilkan MODE JURNAL FIG. 5: Pembanding 4 Kondisi Kesehatan Mesin")
-        render_jurnal_fig5_mode()
+    elif MODE == "INDIKASI_KERUSAKAN_MESIN":
+        print("[INFO] Menampilkan MODE INDIKASI KERUSAKAN MESIN: Evaluasi 4 Indikasi dari Data ASLI VIBRO.CSV")
+        render_indikasi_kerusakan_mesin_mode()
     else:
-        print(f"[WARNING] Mode '{MODE}' tidak dikenal. Menggunakan mode default 'TRIAXIAL'")
-        render_triaxial_mode()
+        print(f"[WARNING] Mode '{MODE}' tidak dikenal. Menggunakan mode default 'INDIKASI_KERUSAKAN_MESIN'")
+        render_indikasi_kerusakan_mesin_mode()
 
 
 if __name__ == "__main__":
