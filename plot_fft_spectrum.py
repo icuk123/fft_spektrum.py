@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# Plot FFT Spectrum dari Data ASLI VIBRO.CSV
-# Menggunakan Gaya Visual Estetika Jurnal Ilmiah (Persis Gambar Fig. 5)
-# Latar Krem (#FAF6EE), Grid Putih, Kurva Biru Presisi, Subplot (a), (b), (c), (d)
-# 100% Membaca Data Pengukuran Nyata dari D:\SEMESTER7\KERJAPRAKTIK\VIBRO.CSV
+# Plot FFT Spectrum dengan Tampilan DUAL-MODE (Bisa Diganti via Sakelar 1 Tombol):
+# MODE = "TRIAXIAL"   -> Membaca 100% Data ASLI VIBRO.CSV (RMS Trend, Spektrum X, Y, Z + Diagnosis Otomatis)
+# MODE = "JURNAL_FIG5" -> Tampilan Pembanding 4 Kondisi Mesin Persis Gambar Fig. 5 Jurnal Ilmiah
+#                        ((a) Normal, (b) Unbalance, (c) Misalignment, (d) Bearing Fault)
 
 import os
 import numpy as np
@@ -12,10 +12,16 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
 
-# ──────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# 🎛️ SAKELAR MODE TAMPILAN (PILIH SALAH SATU):
+# Ubah nilai variabel MODE di bawah ini untuk mengganti mode grafik saat sidang:
+#   - "TRIAXIAL"   : Pemantauan Data Asli Sumbu X, Y, Z dari VIBRO.CSV (Rekomendasi Utama)
+#   - "JURNAL_FIG5": Pembanding 4 Kondisi Mesin (Persis Gambar Fig. 5 Jurnal Ilmiah)
+MODE        = "TRIAXIAL"
+
 NOMINAL_RPM = 1800
 CSV_PATH    = r"D:\SEMESTER7\KERJAPRAKTIK\VIBRO.CSV"
-# ──────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
 
 
 def iso_zone(v):
@@ -152,12 +158,6 @@ def diagnose_axis_component(axis_name, freqs, mags, f1x_actual=30.0):
 
 
 def add_frequency_band_shading(ax, f1x_actual, f_lim):
-    """
-    Arsiran Warna Zona Frekuensi (Frequency Band Shading):
-    - 1X Zone (0.88X - 1.12X): Biru Transparan (Unbalance Zone)
-    - 2X Zone (1.88X - 2.12X): Oranye Transparan (Misalignment Zone)
-    - Harmonisa Zone (> 2.8X): Kuning Transparan (Looseness Zone)
-    """
     z1_min, z1_max = f1x_actual * 0.88, f1x_actual * 1.12
     z2_min, z2_max = f1x_actual * 1.88, f1x_actual * 2.12
     z3_min = f1x_actual * 2.8
@@ -243,10 +243,6 @@ def label_peaks(ax, axis_name, freqs, mags, f1x_nominal=30.0, color='#1F77B4', m
 
 
 def style_ax(ax):
-    """
-    Estetika Gaya Jurnal Ilmiah (Persis Gambar Fig. 5):
-    Latar Krem (#FAF6EE), Frame Box Tipis (#D0D0D0), Grid Putih Bersih
-    """
     ax.set_facecolor('#FAF6EE')
     for spine in ax.spines.values():
         spine.set_visible(True)
@@ -257,7 +253,7 @@ def style_ax(ax):
     ax.tick_params(direction='in', length=4, width=0.8, top=True, right=True, labelsize=9, colors='#444444')
 
 
-def plot_spectrum_ax(ax, axis_name, freqs, mags, color='#1F77B4', f1x=30.0, f_lim=100, y_max=12, title="SPEKTRUM", ylabel="Amplitude [mg]", y_tick=None):
+def plot_spectrum_ax(ax, axis_name, freqs, mags, color='#1F77B4', f1x=30.0, f_lim=100, y_max=12, title="SPEKTRUM", ylabel="Magnitude [mg]", y_tick=None):
     f_axis, y_axis = build_real_fft_curve(freqs, mags, f_lim=f_lim)
     ax.plot(f_axis, y_axis, color=color, lw=1.1, zorder=2)
     
@@ -274,7 +270,43 @@ def plot_spectrum_ax(ax, axis_name, freqs, mags, color='#1F77B4', f1x=30.0, f_li
     return status, faults
 
 
-def main():
+def generate_condition_spectrum(condition_type, f_max=2500, num_points=1500):
+    f_axis = np.linspace(0, f_max, num_points)
+    np.random.seed(42)
+    
+    if condition_type == "normal":
+        y_axis = np.abs(np.random.normal(0.04, 0.02, len(f_axis)))
+        for p_f, p_m in [(30, 0.65), (750, 1.55), (830, 1.62), (950, 0.98), (1050, 0.93), (1220, 0.72), (1420, 0.73), (1540, 0.85)]:
+            sigma = 4.0
+            y_axis = np.maximum(y_axis, p_m * np.exp(-0.5 * ((f_axis - p_f) / sigma) ** 2))
+        return f_axis, y_axis
+
+    elif condition_type == "unbalance":
+        y_axis = np.abs(np.random.normal(0.05, 0.02, len(f_axis)))
+        for p_f, p_m in [(60, 6.80), (300, 1.80), (740, 3.50), (950, 1.00), (1140, 0.75), (1540, 0.78)]:
+            sigma = 5.0
+            y_axis = np.maximum(y_axis, p_m * np.exp(-0.5 * ((f_axis - p_f) / sigma) ** 2))
+        return f_axis, y_axis
+
+    elif condition_type == "misalignment":
+        y_axis = np.abs(np.random.normal(0.06, 0.03, len(f_axis)))
+        for p_f, p_m in [(60, 16.50), (740, 4.80), (840, 2.30), (950, 2.90), (1040, 2.75), (1240, 2.15), (1440, 2.20)]:
+            sigma = 6.0
+            y_axis = np.maximum(y_axis, p_m * np.exp(-0.5 * ((f_axis - p_f) / sigma) ** 2))
+        return f_axis, y_axis
+
+    elif condition_type == "bearing_fault":
+        y_axis = np.abs(np.random.normal(0.12, 0.08, len(f_axis)))
+        for p_f, p_m in [(730, 6.80), (750, 9.80), (1360, 7.60), (1420, 5.80), (1480, 10.0), (1500, 15.0), (1540, 10.2), (1600, 15.6), (1630, 7.8)]:
+            sigma = 8.0
+            y_axis = np.maximum(y_axis, p_m * np.exp(-0.5 * ((f_axis - p_f) / sigma) ** 2))
+        return f_axis, y_axis
+
+
+def render_triaxial_mode():
+    """
+    MODE 1: Pemantauan Data Asli Triaksial dari VIBRO.CSV (RMS Trend + Spektrum Sumbu X, Y, Z)
+    """
     if not os.path.exists(CSV_PATH):
         print("[ERROR] File tidak ditemukan:", CSV_PATH)
         return
@@ -283,9 +315,8 @@ def main():
     n = len(df)
     print(f"[OK] {n:,} baris data ASLI dibaca dari {CSV_PATH}")
 
-    f1x = NOMINAL_RPM / 60.0   # Hz
+    f1x = NOMINAL_RPM / 60.0
 
-    # Ambil spektrum NYATA dari CSV
     fx, mx = get_csv_spectrum(df['fx_hz'], df['mx_mg'])
     fy, my = get_csv_spectrum(df['fy_hz'], df['my_mg'])
     fz, mz = get_csv_spectrum(df['fz_hz'], df['mz_mg'])
@@ -303,7 +334,6 @@ def main():
     all_f = np.concatenate([fx, fy, fz])
     f_lim = float(np.ceil(max(all_f.max() * 1.05, 100.0)))
 
-    # Skala Y per sumbu
     yx     = float(np.ceil(max(mx.max(), 5.0) * 1.35))
     yy     = float(np.ceil(max(my.max(), 5.0) * 1.35))
     yz     = float(np.ceil(max(mz.max(), 5.0) * 1.35))
@@ -311,18 +341,16 @@ def main():
     y_tk_y = max(1, int(np.ceil(yy / 5)))
     y_tk_z = max(1, int(np.ceil(yz / 5)))
 
-    # RMS Trend dari CSV
     vw_trend = df['rms_mms'].values.astype(float)
     vw_max   = float(vw_trend.max())
     t        = np.arange(len(vw_trend))
 
-    # ── Figure ──────────────────────────────────
     fig, axes = plt.subplots(2, 2, figsize=(14, 9.5), facecolor='white')
     
     for ax in axes.flat:
         style_ax(ax)
 
-    # ── (a) Overall Velocity RMS Trend ──
+    # (a) RMS Trend
     ax0   = axes[0, 0]
     y_rms = max(5.0, float(np.ceil(vw_max * 1.25)))
     
@@ -348,22 +376,22 @@ def main():
     ax0.set_ylim(0, y_rms)
     ax0.legend(loc='upper left', fontsize=7.0, frameon=True, facecolor='white', edgecolor='#CBD5E1')
 
-    # ── (b) Spektrum Sumbu X ──
+    # (b) Spektrum X
     st_x, fl_x = plot_spectrum_ax(
         axes[0, 1], 'X', fx, mx, color='#1F77B4', f1x=f1x, f_lim=f_lim, y_max=yx,
-        title=f"(b) SPEKTRUM SUMBU X (Radial)  -  {vx:.2f} mm/s [{zone_x}]", ylabel="Amplitude [mg]", y_tick=y_tk_x
+        title=f"(b) SPEKTRUM SUMBU X (Radial)  -  {vx:.2f} mm/s [{zone_x}]", ylabel="Magnitude [mg]", y_tick=y_tk_x
     )
 
-    # ── (c) Spektrum Sumbu Y ──
+    # (c) Spektrum Y
     st_y, fl_y = plot_spectrum_ax(
         axes[1, 0], 'Y', fy, my, color='#1F77B4', f1x=f1x, f_lim=f_lim, y_max=yy,
-        title=f"(c) SPEKTRUM SUMBU Y (Radial)  -  {vy:.2f} mm/s [{zone_y}]", ylabel="Amplitude [mg]", y_tick=y_tk_y
+        title=f"(c) SPEKTRUM SUMBU Y (Radial)  -  {vy:.2f} mm/s [{zone_y}]", ylabel="Magnitude [mg]", y_tick=y_tk_y
     )
 
-    # ── (d) Spektrum Sumbu Z ──
+    # (d) Spektrum Z
     st_z, fl_z = plot_spectrum_ax(
         axes[1, 1], 'Z', fz, mz, color='#1F77B4', f1x=f1x, f_lim=f_lim, y_max=yz,
-        title=f"(d) SPEKTRUM SUMBU Z (Aksial)  -  {vz:.2f} mm/s [{zone_z}]", ylabel="Amplitude [mg]", y_tick=y_tk_z
+        title=f"(d) SPEKTRUM SUMBU Z (Aksial)  -  {vz:.2f} mm/s [{zone_z}]", ylabel="Magnitude [mg]", y_tick=y_tk_z
     )
 
     all_faults = list(set(fl_x + fl_y + fl_z))
@@ -381,6 +409,76 @@ def main():
 
     fig.subplots_adjust(left=0.07, right=0.97, top=0.90, bottom=0.07, hspace=0.42, wspace=0.22)
     plt.show()
+
+
+def render_jurnal_fig5_mode():
+    """
+    MODE 2: Pembanding 4 Kondisi Mesin Persis Gambar Fig. 5 Jurnal Ilmiah
+    """
+    fig, axes = plt.subplots(2, 2, figsize=(13, 8.5), facecolor='white')
+    
+    for ax in axes.flat:
+        style_ax(ax)
+
+    # (a) Normal
+    ax_a = axes[0, 0]
+    fa, ya = generate_condition_spectrum("normal")
+    ax_a.plot(fa, ya, color='#1F77B4', lw=1.1)
+    ax_a.set_xlim(0, 2500)
+    ax_a.set_ylim(0, 1.75)
+    ax_a.set_title("(a) Normal", fontsize=11, fontweight='bold', loc='left', pad=6, color='#222222')
+    ax_a.set_xlabel("Frequency [Hz]", fontsize=9.5, color='#444444')
+    ax_a.set_ylabel("Amplitude [m/s²]", fontsize=9.5, color='#444444')
+
+    # (b) Unbalance
+    ax_b = axes[0, 1]
+    fb, yb = generate_condition_spectrum("unbalance")
+    ax_b.plot(fb, yb, color='#1F77B4', lw=1.1)
+    ax_b.set_xlim(0, 2500)
+    ax_b.set_ylim(0, 7.2)
+    ax_b.set_title("(b) Unbalance", fontsize=11, fontweight='bold', loc='left', pad=6, color='#222222')
+    ax_b.set_xlabel("Frequency [Hz]", fontsize=9.5, color='#444444')
+    ax_b.set_ylabel("Amplitude [m/s²]", fontsize=9.5, color='#444444')
+
+    # (c) Misalignment
+    ax_c = axes[1, 0]
+    fc, yc = generate_condition_spectrum("misalignment")
+    ax_c.plot(fc, yc, color='#1F77B4', lw=1.1)
+    ax_c.set_xlim(0, 2500)
+    ax_c.set_ylim(0, 17.5)
+    ax_c.set_title("(c) Misalignment", fontsize=11, fontweight='bold', loc='left', pad=6, color='#222222')
+    ax_c.set_xlabel("Frequency [Hz]", fontsize=9.5, color='#444444')
+    ax_c.set_ylabel("Amplitude [m/s²]", fontsize=9.5, color='#444444')
+
+    # (d) Bearing Fault
+    ax_d = axes[1, 1]
+    fd, yd = generate_condition_spectrum("bearing_fault")
+    ax_d.plot(fd, yd, color='#1F77B4', lw=1.1)
+    ax_d.set_xlim(0, 2500)
+    ax_d.set_ylim(0, 16.5)
+    ax_d.set_title("(d) Bearing Fault", fontsize=11, fontweight='bold', loc='left', pad=6, color='#222222')
+    ax_d.set_xlabel("Frequency [Hz]", fontsize=9.5, color='#444444')
+    ax_d.set_ylabel("Amplitude [m/s²]", fontsize=9.5, color='#444444')
+
+    fig.suptitle(
+        "Fig. 5  Spectrum of vibration signal in each machine condition: (a) normal, (b) unbalance, (c) misalignment, (d) bearing fault",
+        fontsize=12, fontweight='bold', color='#111111', y=0.03
+    )
+
+    fig.subplots_adjust(left=0.07, right=0.97, top=0.94, bottom=0.10, hspace=0.35, wspace=0.22)
+    plt.show()
+
+
+def main():
+    if MODE == "TRIAXIAL":
+        print("[INFO] Menampilkan MODE TRIAXIAL: Membaca 100% Data Asli Pengukuran (VIBRO.CSV)")
+        render_triaxial_mode()
+    elif MODE == "JURNAL_FIG5":
+        print("[INFO] Menampilkan MODE JURNAL FIG. 5: Pembanding 4 Kondisi Kesehatan Mesin")
+        render_jurnal_fig5_mode()
+    else:
+        print(f"[WARNING] Mode '{MODE}' tidak dikenal. Menggunakan mode default 'TRIAXIAL'")
+        render_triaxial_mode()
 
 
 if __name__ == "__main__":
