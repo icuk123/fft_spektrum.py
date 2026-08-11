@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# Plot FFT Spectrum dari VIBRO.CSV dengan Diagnosis Otomatis Kerusakan Mesin
-# Diagnosis: 1. Unbalance, 2. Misalignment, 3. Mechanical Looseness, 4. Bearing Fault
+# Plot FFT Spectrum dari VIBRO.CSV dengan Visualisasi Diagnosis Kerusakan Komponen Mesin
+# Diagnosis: Unbalance (Rotor), Misalignment (Kopling), Mechanical Looseness (Pondasi/Baut), Bearing Fault (Bantalan)
 # Layout 2x2: [Overall RMS Trend] [Spektrum X] [Spektrum Y] [Spektrum Z]
 
 import os
@@ -94,25 +94,27 @@ def build_real_fft_curve(freqs, mags, f_lim=100, num_points=1200):
     return f_axis, y_axis
 
 
-def diagnose_axis_faults(freqs, mags, f1x_actual=30.0):
+def diagnose_axis_component(axis_name, freqs, mags, f1x_actual=30.0):
     """
-    Algoritma Diagnosis Otomatis Kerusakan Mesin berdasarkan Karakteristik Spektrum Getaran:
-    1. Unbalance (Ketidakseimbangan Massa): Dominansi puncak 1X (1X > 40% energi & 1X/2X >= 2.0)
-    2. Misalignment (Ketidaksejajaran Poros): Amplitudo 2X tinggi (2X >= 40% dari 1X)
-    3. Mechanical Looseness (Kelonggaran Mekanis): Banyak harmonisa berurutan (>= 4 harmonisa) / sub-harmonisa
-    4. Bearing Fault (Kerusakan Bantalan): Puncak frekuensi tinggi (> 10X / > 300 Hz) / non-sinkron
+    Diagnosa Kerusakan Berdasarkan Matriks Sumbu (X, Y, Z) dan Harmonisa (1X, 2X, 3X...):
+    - Radial (X & Y): 1X tinggi -> Unbalance pada Rotor/Impeller
+    - Aksial (Z): 1X & 2X tinggi -> Angular Misalignment pada Kopling
+    - Radial (X & Y): 2X tinggi -> Parallel Misalignment
+    - Sumbu Y: Deretan harmonisa -> Mechanical Looseness pada Baut Dudukan/Pondasi
+    - All axes: Frekuensi tinggi (> 10X / > 300 Hz) -> Bearing Fault (Cacat Bantalan)
     """
     if len(freqs) == 0 or len(mags) == 0:
-        return "NORMAL", []
+        return "Normal", []
 
     peaks = get_all_peaks_from_csv(freqs, mags, min_gap_hz=4.0)
     if len(peaks) == 0:
-        return "NORMAL", []
+        return "Normal", []
 
     m_1x, m_2x, m_3x = 0.0, 0.0, 0.0
     harmonics_count = 0
     sub_harmonics_count = 0
     high_freq_peaks = 0
+    total_energy = np.sum(mags)
 
     for f, m in peaks:
         ratio = f / f1x_actual
@@ -135,30 +137,57 @@ def diagnose_axis_faults(freqs, mags, f1x_actual=30.0):
             high_freq_peaks += 1
 
     faults = []
-    
-    # Kriteria 1: Unbalance
-    total_energy = np.sum(mags)
+
+    # 1. Unbalance (Terutama Radial X/Y)
     if m_1x >= 15.0 and (m_2x == 0 or m_1x / (m_2x + 1e-6) >= 2.0) and (m_1x / (total_energy + 1e-6) >= 0.25):
-        faults.append("UNBALANCE (1X Dominant)")
+        if axis_name in ['X', 'Y']:
+            faults.append("Unbalance pada Rotor/Impeller (1X Radial)")
+        else:
+            faults.append("Unbalance/Flange Axis (1X Aksial)")
 
-    # Kriteria 2: Misalignment
+    # 2. Misalignment (Aksial Z atau Radial 2X)
     if m_2x >= 10.0 and (m_2x >= 0.40 * m_1x) and (m_1x > 0):
-        faults.append("MISALIGNMENT (High 2X)")
+        if axis_name == 'Z':
+            faults.append("Angular Misalignment pada Kopling (1X/2X Aksial)")
+        else:
+            faults.append("Parallel Misalignment pada Poros (2X Radial)")
 
-    # Kriteria 3: Mechanical Looseness
+    # 3. Mechanical Looseness (Terutama Sumbu Y Vertikal / Radial)
     if harmonics_count >= 4 or sub_harmonics_count >= 2:
-        faults.append("LOOSENESS (Harmonics)")
+        if axis_name == 'Y':
+            faults.append("Structural Looseness pada Baut Dudukan/Pondasi (Harmonisa Y)")
+        else:
+            faults.append("Internal Component Looseness (Harmonisa Radial)")
 
-    # Kriteria 4: Bearing Fault
+    # 4. Bearing Fault
     if high_freq_peaks >= 2:
-        faults.append("BEARING FAULT (High Freq)")
+        faults.append("Bearing Fault / Cacat Bantalan (Frekuensi Tinggi)")
 
-    return ("FAULT DETECTED" if len(faults) > 0 else "NORMAL"), faults
+    return ("FAULT DETECTED" if len(faults) > 0 else "Normal"), faults
 
 
-def label_peaks(ax, freqs, mags, f1x_nominal=30.0, color='#0072BD', min_gap_hz=4.0):
+def add_frequency_band_shading(ax, f1x_actual, f_lim):
     """
-    Beri label puncak signifikan secara akurat beserta Indikator Diagnosis Kerusakan.
+    Menambahkan arsiran warna zona frekuensi latar belakang (Frequency Band Shading):
+    - 1X Zone (0.9X - 1.1X): Biru Transparan (Unbalance Zone)
+    - 2X Zone (1.9X - 2.1X): Oranye Transparan (Misalignment Zone)
+    - Harmonisa Zone (> 2.8X): Kuning Transparan (Looseness Zone)
+    """
+    z1_min, z1_max = f1x_actual * 0.88, f1x_actual * 1.12
+    z2_min, z2_max = f1x_actual * 1.88, f1x_actual * 2.12
+    z3_min = f1x_actual * 2.8
+
+    if z1_max <= f_lim:
+        ax.axvspan(z1_min, z1_max, color='#0284C7', alpha=0.07, label='1X Zone (Unbalance)')
+    if z2_max <= f_lim:
+        ax.axvspan(z2_min, z2_max, color='#D97706', alpha=0.07, label='2X Zone (Misalignment)')
+    if z3_min <= f_lim:
+        ax.axvspan(z3_min, f_lim, color='#EAB308', alpha=0.05, label='Harmonisa Zone (Looseness/Bearing)')
+
+
+def label_peaks(ax, axis_name, freqs, mags, f1x_nominal=30.0, color='#0072BD', min_gap_hz=4.0):
+    """
+    Beri label puncak signifikan secara akurat beserta Indikator Diagnosis Komponen Kerusakan.
     """
     peaks = get_all_peaks_from_csv(freqs, mags, min_gap_hz=min_gap_hz)
     
@@ -168,7 +197,7 @@ def label_peaks(ax, freqs, mags, f1x_nominal=30.0, color='#0072BD', min_gap_hz=4
     if len(candidate_1x) > 0:
         f1x_actual = max(candidate_1x, key=lambda f: dict(peaks)[f])
 
-    status, faults = diagnose_axis_faults(freqs, mags, f1x_actual=f1x_actual)
+    status, faults = diagnose_axis_component(axis_name, freqs, mags, f1x_actual=f1x_actual)
 
     for i, (f, m) in enumerate(peaks):
         ax.plot(f, m, marker='s', color='black', markersize=4.5, zorder=5)
@@ -181,16 +210,25 @@ def label_peaks(ax, freqs, mags, f1x_nominal=30.0, color='#0072BD', min_gap_hz=4
         else:
             tag = f"{ratio:.1f}X"
 
-        # Tambahkan penanda diagnosis pada tag puncak yang sesuai
+        # Tambahkan penanda diagnosis komponen fisik langsung pada label datatip
         diag_suffix = ""
-        if abs(ratio - 1.0) < 0.12 and "UNBALANCE (1X Dominant)" in faults:
-            diag_suffix = " [UNBALANCE]"
-        elif abs(ratio - 2.0) < 0.12 and "MISALIGNMENT (High 2X)" in faults:
-            diag_suffix = " [MISALIGNMENT]"
-        elif "LOOSENESS (Harmonics)" in faults and n > 2:
-            diag_suffix = " [LOOSENESS]"
+        if abs(ratio - 1.0) < 0.12:
+            if axis_name in ['X', 'Y']:
+                diag_suffix = " [Unbalance/Rotor]"
+            else:
+                diag_suffix = " [Unbalance/Aksial]"
+        elif abs(ratio - 2.0) < 0.12:
+            if axis_name == 'Z':
+                diag_suffix = " [Misalignment/Kopling]"
+            else:
+                diag_suffix = " [Misalignment/Poros]"
+        elif n > 2 and (f < 300.0 and ratio <= 10.0):
+            if axis_name == 'Y':
+                diag_suffix = " [Looseness/Baut]"
+            else:
+                diag_suffix = " [Looseness/Internal]"
         elif f > 300.0 or ratio > 10.0:
-            diag_suffix = " [BEARING]"
+            diag_suffix = " [Bearing Defect]"
 
         text_str = f"{tag}{diag_suffix}\n{m:.0f} mg"
         
@@ -221,7 +259,7 @@ def label_peaks(ax, freqs, mags, f1x_nominal=30.0, color='#0072BD', min_gap_hz=4
             zorder=6 + level
         )
 
-    return status, faults
+    return status, faults, f1x_actual
 
 
 def style_ax(ax):
@@ -238,7 +276,7 @@ def style_ax(ax):
     ax.tick_params(direction='in', length=4, width=0.8, top=True, right=True, labelsize=9)
 
 
-def plot_spectrum_ax(ax, freqs, mags, color='#0072BD', f1x=30.0, f_lim=100, y_max=12, title="SPEKTRUM", ylabel="|X(f)|", y_tick=None):
+def plot_spectrum_ax(ax, axis_name, freqs, mags, color='#0072BD', f1x=30.0, f_lim=100, y_max=12, title="SPEKTRUM", ylabel="|X(f)|", y_tick=None):
     f_axis, y_axis = build_real_fft_curve(freqs, mags, f_lim=f_lim)
     ax.plot(f_axis, y_axis, color=color, lw=0.9, zorder=2)
     
@@ -250,7 +288,8 @@ def plot_spectrum_ax(ax, freqs, mags, color='#0072BD', f1x=30.0, f_lim=100, y_ma
     if y_tick:
         ax.yaxis.set_major_locator(MultipleLocator(y_tick))
         
-    status, faults = label_peaks(ax, freqs, mags, f1x_nominal=f1x, color=color)
+    status, faults, f1x_actual = label_peaks(ax, axis_name, freqs, mags, f1x_nominal=f1x, color=color)
+    add_frequency_band_shading(ax, f1x_actual, f_lim)
     return status, faults
 
 
@@ -341,34 +380,34 @@ def main():
 
     # ── [2] Spektrum Sumbu X ──
     st_x, fl_x = plot_spectrum_ax(
-        axes[0, 1], fx, mx, color='#0284C7', f1x=f1x, f_lim=f_lim, y_max=yx,
-        title=f"SPEKTRUM SUMBU X  -  {vx:.2f} mm/s  [{zone_x}]", ylabel="|X(f)|", y_tick=y_tk_x
+        axes[0, 1], 'X', fx, mx, color='#0284C7', f1x=f1x, f_lim=f_lim, y_max=yx,
+        title=f"SPEKTRUM SUMBU X (Radial)  -  {vx:.2f} mm/s  [{zone_x}]", ylabel="|X(f)|", y_tick=y_tk_x
     )
 
     # ── [3] Spektrum Sumbu Y ──
     st_y, fl_y = plot_spectrum_ax(
-        axes[1, 0], fy, my, color='#D97706', f1x=f1x, f_lim=f_lim, y_max=yy,
-        title=f"SPEKTRUM SUMBU Y  -  {vy:.2f} mm/s  [{zone_y}]", ylabel="|Y(f)|", y_tick=y_tk_y
+        axes[1, 0], 'Y', fy, my, color='#D97706', f1x=f1x, f_lim=f_lim, y_max=yy,
+        title=f"SPEKTRUM SUMBU Y (Radial)  -  {vy:.2f} mm/s  [{zone_y}]", ylabel="|Y(f)|", y_tick=y_tk_y
     )
 
     # ── [4] Spektrum Sumbu Z ──
     st_z, fl_z = plot_spectrum_ax(
-        axes[1, 1], fz, mz, color='#DC2626', f1x=f1x, f_lim=f_lim, y_max=yz,
-        title=f"SPEKTRUM SUMBU Z  -  {vz:.2f} mm/s  [{zone_z}]", ylabel="|Z(f)|", y_tick=y_tk_z
+        axes[1, 1], 'Z', fz, mz, color='#DC2626', f1x=f1x, f_lim=f_lim, y_max=yz,
+        title=f"SPEKTRUM SUMBU Z (Aksial)  -  {vz:.2f} mm/s  [{zone_z}]", ylabel="|Z(f)|", y_tick=y_tk_z
     )
 
     # Kumpulkan semua temuan diagnosis dari sumbu X, Y, Z
     all_faults = list(set(fl_x + fl_y + fl_z))
     if len(all_faults) > 0:
-        diag_summary = "DIAGNOSIS KERUSAKAN: " + ", ".join(all_faults)
+        diag_summary = "DIAGNOSIS KOMPONEN KERUSAKAN: " + " | ".join(all_faults)
         diag_color = "#DC2626"
     else:
-        diag_summary = "DIAGNOSIS KERUSAKAN: NO CRITICAL FAULT DETECTED (System Normal)"
+        diag_summary = "DIAGNOSIS KERUSAKAN: TIDAK TERDETEKSI ANOMALI KRITIS (Sistem Normal)"
         diag_color = "#16A34A"
 
     fig.suptitle(
         f"ISO 10816-3 ({NOMINAL_RPM} RPM)  -  {zone_all} | MAX RMS: {vw_max:.2f} mm/s\n{diag_summary}",
-        fontsize=11.0, fontweight='bold', color=diag_color, y=0.99
+        fontsize=10.5, fontweight='bold', color=diag_color, y=0.99
     )
 
     fig.subplots_adjust(left=0.07, right=0.97, top=0.90, bottom=0.07, hspace=0.45, wspace=0.25)
