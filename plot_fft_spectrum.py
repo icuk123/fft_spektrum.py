@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# Plot FFT Spectrum dari Data Asli VIBRO.CSV
-# 100% Menggunakan Data Nyata Pengukuran (VIBRO.CSV)
-# Analisis Triaksial (Sumbu X, Y, Z) + RMS Trend + Diagnosis Otomatis Kerusakan Mesin
-# Layout 2x2: [Overall RMS Trend] [Spektrum X] [Spektrum Y] [Spektrum Z]
+# Plot FFT Spectrum dari Data ASLI VIBRO.CSV
+# Menggunakan Gaya Visual Estetika Jurnal Ilmiah (Persis Gambar Fig. 5)
+# Latar Krem (#FAF6EE), Grid Putih, Kurva Biru Presisi, Subplot (a), (b), (c), (d)
+# 100% Membaca Data Pengukuran Nyata dari D:\SEMESTER7\KERJAPRAKTIK\VIBRO.CSV
 
 import os
 import numpy as np
@@ -50,15 +50,11 @@ def get_csv_spectrum(f_series, m_series):
 
 
 def get_all_peaks_from_csv(freqs, mags, min_gap_hz=4.0):
-    """
-    Ambil puncak-puncak signifikan dari data CSV.
-    Menyaring derau (noise floor) agar tidak menumpuk label di dasar grafik.
-    """
     if len(freqs) == 0:
         return []
     
     max_m = mags.max()
-    threshold = max(2.5, max_m * 0.20)  # Hanya label puncak > 20% dari puncak terbesar & min 2.5 mg
+    threshold = max(2.5, max_m * 0.20)
     
     peak_dict = {}
     for f, m in zip(freqs, mags):
@@ -96,14 +92,6 @@ def build_real_fft_curve(freqs, mags, f_lim=100, num_points=1200):
 
 
 def diagnose_axis_component(axis_name, freqs, mags, f1x_actual=30.0):
-    """
-    Diagnosa Kerusakan Berdasarkan Data Asli Sumbu (X, Y, Z) dan Harmonisa (1X, 2X, 3X...):
-    - Radial (X & Y): 1X tinggi -> Unbalance pada Rotor/Impeller
-    - Aksial (Z): 1X & 2X tinggi -> Angular Misalignment pada Kopling
-    - Radial (X & Y): 2X tinggi -> Parallel Misalignment
-    - Sumbu Y: Deretan harmonisa -> Mechanical Looseness pada Baut Dudukan/Pondasi
-    - All axes: Frekuensi tinggi (> 10X / > 300 Hz) -> Bearing Fault (Cacat Bantalan)
-    """
     if len(freqs) == 0 or len(mags) == 0:
         return "Normal", []
 
@@ -139,28 +127,24 @@ def diagnose_axis_component(axis_name, freqs, mags, f1x_actual=30.0):
 
     faults = []
 
-    # 1. Unbalance (Terutama Radial X/Y)
     if m_1x >= 15.0 and (m_2x == 0 or m_1x / (m_2x + 1e-6) >= 2.0) and (m_1x / (total_energy + 1e-6) >= 0.25):
         if axis_name in ['X', 'Y']:
             faults.append("Unbalance pada Rotor/Impeller (1X Radial)")
         else:
             faults.append("Unbalance/Flange Axis (1X Aksial)")
 
-    # 2. Misalignment (Aksial Z atau Radial 2X)
     if m_2x >= 10.0 and (m_2x >= 0.40 * m_1x) and (m_1x > 0):
         if axis_name == 'Z':
             faults.append("Angular Misalignment pada Kopling (1X/2X Aksial)")
         else:
             faults.append("Parallel Misalignment pada Poros (2X Radial)")
 
-    # 3. Mechanical Looseness (Terutama Sumbu Y Vertikal / Radial)
     if harmonics_count >= 4 or sub_harmonics_count >= 2:
         if axis_name == 'Y':
-            faults.append("Structural Looseness pada Baut Dudukan/Pondasi (Harmonisa Y)")
+            faults.append("Structural Looseness pada Baut Dudukan (Harmonisa Y)")
         else:
             faults.append("Internal Component Looseness (Harmonisa Radial)")
 
-    # 4. Bearing Fault
     if high_freq_peaks >= 2:
         faults.append("Bearing Fault / Cacat Bantalan (Frekuensi Tinggi)")
 
@@ -179,17 +163,14 @@ def add_frequency_band_shading(ax, f1x_actual, f_lim):
     z3_min = f1x_actual * 2.8
 
     if z1_max <= f_lim:
-        ax.axvspan(z1_min, z1_max, color='#0284C7', alpha=0.07, label='1X Zone (Unbalance)')
+        ax.axvspan(z1_min, z1_max, color='#0284C7', alpha=0.08, label='1X Zone (Unbalance)')
     if z2_max <= f_lim:
-        ax.axvspan(z2_min, z2_max, color='#D97706', alpha=0.07, label='2X Zone (Misalignment)')
+        ax.axvspan(z2_min, z2_max, color='#D97706', alpha=0.08, label='2X Zone (Misalignment)')
     if z3_min <= f_lim:
-        ax.axvspan(z3_min, f_lim, color='#EAB308', alpha=0.05, label='Harmonisa Zone (Looseness/Bearing)')
+        ax.axvspan(z3_min, f_lim, color='#EAB308', alpha=0.06, label='Harmonisa Zone (Looseness/Bearing)')
 
 
-def label_peaks(ax, axis_name, freqs, mags, f1x_nominal=30.0, color='#0072BD', min_gap_hz=4.0):
-    """
-    Beri label puncak signifikan secara akurat beserta Indikator Diagnosis Komponen Kerusakan.
-    """
+def label_peaks(ax, axis_name, freqs, mags, f1x_nominal=30.0, color='#1F77B4', min_gap_hz=4.0):
     peaks = get_all_peaks_from_csv(freqs, mags, min_gap_hz=min_gap_hz)
     
     f1x_actual = f1x_nominal
@@ -200,7 +181,7 @@ def label_peaks(ax, axis_name, freqs, mags, f1x_nominal=30.0, color='#0072BD', m
     status, faults = diagnose_axis_component(axis_name, freqs, mags, f1x_actual=f1x_actual)
 
     for i, (f, m) in enumerate(peaks):
-        ax.plot(f, m, marker='s', color='black', markersize=4.5, zorder=5)
+        ax.plot(f, m, marker='s', color='black', markersize=4.2, zorder=5)
 
         ratio = f / f1x_actual
         n = round(ratio)
@@ -262,23 +243,27 @@ def label_peaks(ax, axis_name, freqs, mags, f1x_nominal=30.0, color='#0072BD', m
 
 
 def style_ax(ax):
-    ax.set_facecolor('white')
+    """
+    Estetika Gaya Jurnal Ilmiah (Persis Gambar Fig. 5):
+    Latar Krem (#FAF6EE), Frame Box Tipis (#D0D0D0), Grid Putih Bersih
+    """
+    ax.set_facecolor('#FAF6EE')
     for spine in ax.spines.values():
         spine.set_visible(True)
-        spine.set_color('black')
+        spine.set_color('#D0D0D0')
         spine.set_linewidth(0.8)
-    ax.grid(True, which='major', color='#D0D0D0', linestyle='-', linewidth=0.5)
+    ax.grid(True, which='major', color='white', linestyle='-', linewidth=0.8)
     ax.set_axisbelow(True)
-    ax.tick_params(direction='in', length=4, width=0.8, top=True, right=True, labelsize=9)
+    ax.tick_params(direction='in', length=4, width=0.8, top=True, right=True, labelsize=9, colors='#444444')
 
 
-def plot_spectrum_ax(ax, axis_name, freqs, mags, color='#0072BD', f1x=30.0, f_lim=100, y_max=12, title="SPEKTRUM", ylabel="|X(f)|", y_tick=None):
+def plot_spectrum_ax(ax, axis_name, freqs, mags, color='#1F77B4', f1x=30.0, f_lim=100, y_max=12, title="SPEKTRUM", ylabel="Amplitude [mg]", y_tick=None):
     f_axis, y_axis = build_real_fft_curve(freqs, mags, f_lim=f_lim)
-    ax.plot(f_axis, y_axis, color=color, lw=0.9, zorder=2)
+    ax.plot(f_axis, y_axis, color=color, lw=1.1, zorder=2)
     
-    ax.set_title(title, fontsize=10, fontweight='bold', color='black', pad=7)
-    ax.set_xlabel("f (in Hz)", fontsize=9.5, fontweight='bold', color='black', labelpad=3)
-    ax.set_ylabel(ylabel, fontsize=9.5, fontweight='bold', color='black', labelpad=3)
+    ax.set_title(title, fontsize=10.5, fontweight='bold', color='#111111', loc='left', pad=6)
+    ax.set_xlabel("Frequency [Hz]", fontsize=9.5, fontweight='bold', color='#333333', labelpad=3)
+    ax.set_ylabel(ylabel, fontsize=9.5, fontweight='bold', color='#333333', labelpad=3)
     ax.set_xlim(0, f_lim)
     ax.set_ylim(0, y_max)
     if y_tick:
@@ -329,8 +314,6 @@ def main():
     # RMS Trend dari CSV
     vw_trend = df['rms_mms'].values.astype(float)
     vw_max   = float(vw_trend.max())
-    vw_avg   = float(vw_trend.mean())
-    vw_last  = float(vw_trend[-1])
     t        = np.arange(len(vw_trend))
 
     # ── Figure ──────────────────────────────────
@@ -339,14 +322,14 @@ def main():
     for ax in axes.flat:
         style_ax(ax)
 
-    # ── [1] Overall RMS Trend ──
+    # ── (a) Overall Velocity RMS Trend ──
     ax0   = axes[0, 0]
     y_rms = max(5.0, float(np.ceil(vw_max * 1.25)))
     
     ax0.axhline(1.4, color='#16A34A', ls='--', lw=1.3, label='ZONE A Threshold (1.4 mm/s)')
     ax0.axhline(2.8, color='#D97706', ls='--', lw=1.3, label='ZONE B Threshold (2.8 mm/s)')
     ax0.axhline(4.5, color='#DC2626', ls='--', lw=1.3, label='ZONE C Threshold (4.5 mm/s)')
-    ax0.plot(t, vw_trend, color='#0EA5E9', lw=1.8, marker='o', ms=2, label=f'Trend Line')
+    ax0.plot(t, vw_trend, color='#1F77B4', lw=1.8, marker='o', ms=2, label=f'Trend Line')
     
     idx_max = np.argmax(vw_trend)
     ax0.plot(t[idx_max], vw_trend[idx_max], marker='*', color='#EF4444', ms=12, zorder=10)
@@ -358,40 +341,31 @@ def main():
         arrowprops=dict(fc='#EF4444', ec='#EF4444', arrowstyle='->', lw=1.3),
         fontsize=8.0, fontweight='bold', color='white', zorder=11
     )
-    ax0.annotate(
-        f"Last: {vw_last:.2f} mm/s",
-        xy=(t[-1], vw_trend[-1]),
-        xytext=(t[-1] - len(t) * 0.28, vw_trend[-1] + y_rms * 0.08),
-        bbox=dict(boxstyle='round,pad=0.3', fc='#0F172A', ec='#0EA5E9', lw=1.2),
-        arrowprops=dict(fc='#0EA5E9', arrowstyle='->', lw=1.1),
-        fontsize=8.0, fontweight='bold', color='white'
-    )
-    ax0.set_title(f"1. OVERALL VELOCITY RMS TREND  [Max: {vw_max:.2f} mm/s]", fontsize=10, fontweight='bold', color='#0F172A', pad=7)
-    ax0.set_xlabel("Time (Record Samples)", fontsize=9, fontweight='bold', color='#0F172A', labelpad=3)
-    ax0.set_ylabel("Velocity RMS (mm/s)", fontsize=9, fontweight='bold', color='#0F172A')
+    ax0.set_title(f"(a) OVERALL VELOCITY RMS TREND  [Max: {vw_max:.2f} mm/s]", fontsize=10.5, fontweight='bold', color='#111111', loc='left', pad=6)
+    ax0.set_xlabel("Time (Record Samples)", fontsize=9.5, fontweight='bold', color='#333333', labelpad=3)
+    ax0.set_ylabel("Velocity RMS [mm/s]", fontsize=9.5, fontweight='bold', color='#333333')
     ax0.set_xlim(0, len(t) - 1)
     ax0.set_ylim(0, y_rms)
-    ax0.legend(loc='upper left', fontsize=6.8, frameon=True, facecolor='white', edgecolor='#CBD5E1')
+    ax0.legend(loc='upper left', fontsize=7.0, frameon=True, facecolor='white', edgecolor='#CBD5E1')
 
-    # ── [2] Spektrum Sumbu X ──
+    # ── (b) Spektrum Sumbu X ──
     st_x, fl_x = plot_spectrum_ax(
-        axes[0, 1], 'X', fx, mx, color='#0284C7', f1x=f1x, f_lim=f_lim, y_max=yx,
-        title=f"SPEKTRUM SUMBU X (Radial)  -  {vx:.2f} mm/s  [{zone_x}]", ylabel="|X(f)|", y_tick=y_tk_x
+        axes[0, 1], 'X', fx, mx, color='#1F77B4', f1x=f1x, f_lim=f_lim, y_max=yx,
+        title=f"(b) SPEKTRUM SUMBU X (Radial)  -  {vx:.2f} mm/s [{zone_x}]", ylabel="Amplitude [mg]", y_tick=y_tk_x
     )
 
-    # ── [3] Spektrum Sumbu Y ──
+    # ── (c) Spektrum Sumbu Y ──
     st_y, fl_y = plot_spectrum_ax(
-        axes[1, 0], 'Y', fy, my, color='#D97706', f1x=f1x, f_lim=f_lim, y_max=yy,
-        title=f"SPEKTRUM SUMBU Y (Radial)  -  {vy:.2f} mm/s  [{zone_y}]", ylabel="|Y(f)|", y_tick=y_tk_y
+        axes[1, 0], 'Y', fy, my, color='#1F77B4', f1x=f1x, f_lim=f_lim, y_max=yy,
+        title=f"(c) SPEKTRUM SUMBU Y (Radial)  -  {vy:.2f} mm/s [{zone_y}]", ylabel="Amplitude [mg]", y_tick=y_tk_y
     )
 
-    # ── [4] Spektrum Sumbu Z ──
+    # ── (d) Spektrum Sumbu Z ──
     st_z, fl_z = plot_spectrum_ax(
-        axes[1, 1], 'Z', fz, mz, color='#DC2626', f1x=f1x, f_lim=f_lim, y_max=yz,
-        title=f"SPEKTRUM SUMBU Z (Aksial)  -  {vz:.2f} mm/s  [{zone_z}]", ylabel="|Z(f)|", y_tick=y_tk_z
+        axes[1, 1], 'Z', fz, mz, color='#1F77B4', f1x=f1x, f_lim=f_lim, y_max=yz,
+        title=f"(d) SPEKTRUM SUMBU Z (Aksial)  -  {vz:.2f} mm/s [{zone_z}]", ylabel="Amplitude [mg]", y_tick=y_tk_z
     )
 
-    # Kumpulkan semua temuan diagnosis dari data asli sumbu X, Y, Z
     all_faults = list(set(fl_x + fl_y + fl_z))
     if len(all_faults) > 0:
         diag_summary = "DIAGNOSIS KOMPONEN KERUSAKAN: " + " | ".join(all_faults)
@@ -405,7 +379,7 @@ def main():
         fontsize=10.5, fontweight='bold', color=diag_color, y=0.99
     )
 
-    fig.subplots_adjust(left=0.07, right=0.97, top=0.90, bottom=0.07, hspace=0.45, wspace=0.25)
+    fig.subplots_adjust(left=0.07, right=0.97, top=0.90, bottom=0.07, hspace=0.42, wspace=0.22)
     plt.show()
 
 
